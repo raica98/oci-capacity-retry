@@ -17,7 +17,7 @@ permissions:
 jobs:
   try-launch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 65
     env:
       OCI_USER: ${{ secrets.OCI_USER }}
       OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
