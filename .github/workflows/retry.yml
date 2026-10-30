@@ -80,3 +80,9 @@ jobs:
       - name: Stop retrying if it already exists
         if: steps.check.outputs.ready == 'true' && hashFiles('already.txt') != ''
         run: gh workflow disable retry-oci-vm --repo "$GITHUB_REPOSITORY"
+
+      - name: Queue the next attempt (does not rely on the cron scheduler)
+        if: steps.check.outputs.ready == 'true' && hashFiles('success.txt') == '' && hashFiles('already.txt') == ''
+        run: |
+          sleep 30
+          gh workflow run retry-oci-vm --repo "$GITHUB_REPOSITORY"
