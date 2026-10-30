@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'How long this run keeps retrying (minutes)'
+        default: '50'
 
 concurrency:
   group: oci-retry
@@ -26,6 +30,7 @@ jobs:
       OCI_KEY: ${{ secrets.OCI_KEY }}
       SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
       OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: 'True'
+      RUN_MINUTES: ${{ github.event.inputs.minutes || '50' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
