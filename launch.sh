@@ -28,8 +28,12 @@ if [ -z "$SUBNET_ID" ]; then echo "No subnet found"; exit 0; fi
 # 3) Try every availability domain that holds one of our saved boot volumes.
 ads=$(oci iam availability-domain list --compartment-id "$T" 2>/dev/null | jq -r '.data[].name')
 for AD in $ads; do
-  BV=$(oci bv boot-volume list --compartment-id "$T" --availability-domain "$AD" --lifecycle-state AVAILABLE --all 2>/dev/null \
-    | jq -r '[.data[]? | select(."display-name" | test("pumpbot-executor-disk|instance-20260820-2037"))] | .[0].id // empty')
+  bvjson=$(oci bv boot-volume list --compartment-id "$T" --availability-domain "$AD" --all 2>&1)
+  if ! echo "$bvjson" | jq -e . >/dev/null 2>&1; then
+    echo "[$AD] boot volume list failed: $(echo "$bvjson" | tr '\n' ' ' | cut -c1-300)"; continue
+  fi
+  echo "[$AD] boot volumes seen: $(echo "$bvjson" | jq -r '[.data[]? | ."display-name" + " (" + ."lifecycle-state" + ")"] | join(", ")')"
+  BV=$(echo "$bvjson" | jq -r '[.data[]? | select(."lifecycle-state" == "AVAILABLE") | select(."display-name" | test("pumpbot-executor-disk|instance-20260820-2037"))] | .[0].id // empty')
   if [ -z "$BV" ]; then echo "[$AD] no saved boot volume here, skipping"; continue; fi
 
   echo "[$AD] launching $SHAPE ${OCPUS}/${MEM_GB}GB from boot volume ${BV: -12}"
