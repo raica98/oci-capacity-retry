@@ -1,0 +1,82 @@
+name: retry-oci-vm
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: oci-retry
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  try-launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OCI_USER: ${{ secrets.OCI_USER }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+      OCI_REGION: ${{ secrets.OCI_REGION }}
+      OCI_KEY: ${{ secrets.OCI_KEY }}
+      SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: 'True'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets are set
+        id: check
+        run: |
+          if [ -z "$OCI_KEY" ] || [ -z "$OCI_TENANCY" ] || [ -z "$OCI_USER" ] || [ -z "$OCI_FINGERPRINT" ] || [ -z "$OCI_REGION" ]; then
+            echo "Secrets not set yet - nothing to do."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.ready == 'true'
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install OCI CLI
+        if: steps.check.outputs.ready == 'true'
+        run: pip install -q -r requirements.txt
+
+      - name: Write OCI config
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.oci
+          printf '%s\n' "$OCI_KEY" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          {
+            echo "[DEFAULT]"
+            echo "user=$OCI_USER"
+            echo "fingerprint=$OCI_FINGERPRINT"
+            echo "tenancy=$OCI_TENANCY"
+            echo "region=$OCI_REGION"
+            echo "key_file=$HOME/.oci/key.pem"
+          } > ~/.oci/config
+
+      - name: Try to launch the VM
+        if: steps.check.outputs.ready == 'true'
+        run: bash launch.sh
+
+      - name: Announce success and stop retrying
+        if: steps.check.outputs.ready == 'true' && hashFiles('success.txt') != ''
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "PumpBot VM created" \
+            --body "The executor VM was launched: $(cat success.txt). It boots from your saved disk, so the runner should start on its own. Retries have been switched off."
+          gh workflow disable retry-oci-vm --repo "$GITHUB_REPOSITORY"
+
+      - name: Stop retrying if it already exists
+        if: steps.check.outputs.ready == 'true' && hashFiles('already.txt') != ''
+        run: gh workflow disable retry-oci-vm --repo "$GITHUB_REPOSITORY"
