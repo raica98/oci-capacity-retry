@@ -1,0 +1,43 @@
+#cloud-config
+# First-boot setup for the PumpBot executor: headless Chromium running the app in
+# executor mode, kept alive by systemd. Contains no secrets.
+package_update: true
+packages:
+  - nodejs
+  - npm
+  - chromium-browser
+  - ca-certificates
+write_files:
+  - path: /opt/pumpbot-runner/runner.js
+    encoding: b64
+    permissions: '0644'
+    content: @@RUNNER@@
+  - path: /opt/pumpbot-runner/alpacaFeed.js
+    encoding: b64
+    permissions: '0644'
+    content: @@ALPACA@@
+  - path: /etc/systemd/system/pumpbot-runner.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=PumpBot headless executor
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      User=ubuntu
+      WorkingDirectory=/opt/pumpbot-runner
+      Environment=PUMPBOT_URL=https://pumpbot-bolt.vercel.app/?mode=executor
+      Environment=CHROMIUM_PATH=/usr/bin/chromium-browser
+      Environment=HOME=/home/ubuntu
+      ExecStart=/usr/bin/node runner.js
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - [ bash, -c, "cd /opt/pumpbot-runner && npm init -y >/dev/null 2>&1 && npm install --no-audit --no-fund puppeteer-core ws" ]
+  - [ chown, -R, "ubuntu:ubuntu", /opt/pumpbot-runner ]
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, pumpbot-runner.service ]

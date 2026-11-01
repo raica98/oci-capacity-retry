@@ -70,6 +70,17 @@ jobs:
             echo "key_file=$HOME/.oci/key.pem"
           } > ~/.oci/config
 
+      - name: Restore runner files from secrets (kept out of the public repo)
+        if: steps.check.outputs.ready == 'true'
+        env:
+          RUNNER_JS_B64: ${{ secrets.RUNNER_JS_B64 }}
+          ALPACA_JS_B64: ${{ secrets.ALPACA_JS_B64 }}
+        run: |
+          mkdir -p runner
+          printf '%s' "$RUNNER_JS_B64" | base64 -d > runner/runner.js
+          printf '%s' "$ALPACA_JS_B64" | base64 -d > runner/alpacaFeed.js
+          test -s runner/runner.js && test -s runner/alpacaFeed.js
+
       - name: Try to launch the VM
         if: steps.check.outputs.ready == 'true'
         run: bash launch.sh
